@@ -1,2 +1,2 @@
 # Mesh-NodeReceive
-Get data from node gateway
+Get data from gateway/previous node
