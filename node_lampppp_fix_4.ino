@@ -56,13 +56,17 @@ void receiveSerial2() {
 
         newDoc["Node"] = nodeNumber;
         newDoc["VSOLAR"] = round(vsolar * 100.0) / 100.0;
-        newDoc["VBAT"] = round(vbat * 100.0) / 100.0;  // Round vbat to two decimal places
+        newDoc["VBAT"] = round(vbat * 100.0) / 100.0;
         newDoc["LAMP"] = (controlLedDoc["LAMP"] == 1) ? "ON" : "OFF";
 
         String jsonString;
         serializeJson(newDoc, jsonString);
-        mesh.sendSingle(sender, jsonString);
-        Serial.println("Data: " + jsonString);
+        for (int i = 0; i < jumlahNodes; i++) {
+          if (sender == newNodes[i]) {
+            mesh.sendSingle(newNodes[i], jsonString);
+            Serial.println("Data: " + jsonString);
+          }
+        }
       }
       x = 0;
       memset(buffValue, 0, sizeof(buffValue));
@@ -73,7 +77,6 @@ void receiveSerial2() {
 
 void sendMessage() {
   String msg = receivedData;
-  uint32_t targetNode;
 
   bool isFromNewNode = false;
   for (int i = 0; i < jumlahNodes; i++) {
@@ -88,10 +91,30 @@ void sendMessage() {
       mesh.sendSingle(nextNodes[i], msg);
       Serial.printf("Data Sent to: %u msg=%s\n", nextNodes[i], msg.c_str());
     }
+  } else if (isFromNewNode && jumlahNextNodes == 0) {
+    for (int i = 0; i < jumlahNextNodes; i++) {
+      ;
+    }
   } else if (!isFromNewNode && jumlahNodes > 0 && jumlahNextNodes > 0) {
     for (int i = 0; i < jumlahNodes; i++) {
       mesh.sendSingle(newNodes[i], msg);
       Serial.printf("Data Sent to: %u msg=%s\n", newNodes[i], msg.c_str());
+    }
+  }
+  msg = "";
+}
+
+void checkConnectionStatus() {
+  if (jumlahNodes > 0) {
+    for (int i = 0; i < jumlahNodes; i++) { 
+      if (!mesh.isConnected(newNodes[i])) {
+        Serial.printf("Normal Node %u tidak terhubung. Menghapus dari daftar.\n", newNodes[i]);
+        for (int j = i; j < jumlahNodes - 1; j++) {
+          newNodes[j] = newNodes[j + 1];
+        }
+        jumlahNodes--;
+        Serial.printf("Jumlah Normal Node Terhubung: %d\n", jumlahNodes);
+      }
     }
   }
 
@@ -104,21 +127,6 @@ void sendMessage() {
         }
         jumlahNextNodes = 0;
         Serial.printf("Jumlah Next Node: %d\n", jumlahNextNodes);
-      }
-    }
-  }
-}
-
-void checkConnectionStatus() {
-  if (jumlahNodes > 0) {
-    for (int i = 0; i < jumlahNodes; i++) {
-      if (!mesh.isConnected(newNodes[i])) {
-        Serial.printf("Normal Node %u tidak terhubung. Menghapus dari daftar.\n", newNodes[i]);
-        for (int j = i; j < jumlahNodes - 1; j++) {
-          newNodes[j] = newNodes[j + 1];
-        }
-        jumlahNodes--;
-        Serial.printf("Jumlah Normal Node Terhubung: %d\n", jumlahNodes);
       }
     }
   }
@@ -142,20 +150,19 @@ void receivedCallback(uint32_t from, String& msg) {
   uint32_t nodeId = mesh.getNodeId();
   Serial.printf("received from %u msg=%s\n", from, msg.c_str());
   sender = from;
-  receivedData = msg.c_str();
-
+  receivedData = msg;
   sendMessage();
 }
 
 void newConnectionCallback(uint32_t nodeId) {
   Serial.printf("New Connection, nodeId = %u\n", nodeId);
   newId = nodeId;
-  checkConnectionStatus();
   saveNode();
 }
 
 void changedConnectionCallback() {
   Serial.printf("Changed connections\n");
+  checkConnectionStatus();
 }
 
 void nodeTimeAdjustedCallback(int32_t offset) {
@@ -184,9 +191,4 @@ void loop() {
     receiveSerial2();
     t1 = millis();
   }
-
-  // if (millis() - tl > 2000) {
-  //   sendMessage();
-  //   tl = millis();
-  // }
 }
